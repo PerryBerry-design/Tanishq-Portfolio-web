@@ -15,11 +15,13 @@ const instrument = Instrument_Serif({
   variable: '--font-instrument',
 })
 
-export const metadata: Metadata = {
-  title: 'Tanishq Singh — Motion Designer',
-  description:
-    'A collectible library of cinematic motion design work. Title sequences, product films, and brand motion crafted with tactile precision.',
-  generator: 'v0.app',
+export const metadata = {
+  title: 'Tanishq Design Portfolio',
+  description: 'Independent Motion Designer',
+  icons: {
+    icon: '/gifs/T.svg', // Put this file in your public/ folder
+    apple: '/apple-touch-icon.png', // Put this file in your public/ folder
+  },
 }
 
 export const viewport: Viewport = {

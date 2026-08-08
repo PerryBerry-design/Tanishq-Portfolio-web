@@ -21,7 +21,7 @@ export function Hero() {
 
       <h1 className="mt-8 max-w-4xl text-balance text-5xl font-medium leading-[0.98] tracking-tight sm:text-7xl">
         A collectible library of{" "}
-        <span className="font-serif italic text-primary">motion</span> crafted
+        <span className="font-serif italic text-primary text-yellow-200">motion</span> crafted
         to be picked up.
       </h1>
 
