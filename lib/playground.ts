@@ -9,7 +9,7 @@ export type PlaygroundItem = {
 
 export const playgroundItems: PlaygroundItem[] = [
   {
-    id: "character Design",
+    id: "1",
     title: "Spooky halloween",
     description: "Elastic trail that eases toward the pointer",
     tool: "Character design",
@@ -17,7 +17,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "character Design",
+    id: "2",
     title: "Demon Girl",
     description: "Displacement shader distorting a mesh grid on scroll",
     tool: "Character design",
@@ -25,7 +25,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2026",
   },
   {
-    id: "character Design",
+    id: "3",
     title: "Capy bara",
     description: "Character-cycling reveal for headline transitions",
     tool: "Character design",
@@ -33,7 +33,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "character Design",
+    id: "4",
     title: "Gyro",
     description: "Particles settling into orbit on drag release",
     tool: "Character design",
@@ -41,7 +41,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2026",
   },
   {
-    id: "characyer Design",
+    id: "5",
     title: "pvz",
     description: "Particles settling into orbit on drag release",
     tool: "Character design",
@@ -49,7 +49,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "characyer Design",
+    id: "6",
     title: "sci-fi",
     description: "Particles settling into orbit on drag release",
     tool: "animation",
@@ -57,7 +57,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "characyer Design",
+    id: "7",
     title: "Motion Banner",
     description: "Particles settling into orbit on drag release",
     tool: "Visual design",
@@ -65,7 +65,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "character Design",
+    id: "8",
     title: "Sarwasti maa",
     description: "Particles settling into orbit on drag release",
     tool: "Character design",
@@ -73,7 +73,7 @@ export const playgroundItems: PlaygroundItem[] = [
     year: "2025",
   },
   {
-    id: "characyer Design",
+    id: "9",
     title: "Cozy Fuji san",
     description: "Particles settling into orbit on drag release",
     tool: "Visual design",

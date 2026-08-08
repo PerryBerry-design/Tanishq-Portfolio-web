@@ -8,7 +8,6 @@ const nav = [
   { label: "Work", index: 1 },
   { label: "Playground", index: 2 },
   { label: "Contact", index: 3 },
-  { label: "Bio", index: 4 },
 ]
 
 interface SiteHeaderProps {
