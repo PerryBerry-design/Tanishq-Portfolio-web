@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type ChromaticGridConfig = {
   spacing: number
@@ -11,7 +11,7 @@ type ChromaticGridConfig = {
   maxScale: number
   speed: number
   zoom: number
-  color: string // "R, G, B"
+  color: string
   chromaticShift: number
   hoverRadius: number
   hoverMaxScale: number
@@ -36,7 +36,6 @@ const DEFAULT_CONFIG: ChromaticGridConfig = {
   hoverRelease: 0.04,
 }
 
-// --- Simplex Noise (3D) — ported as-is from the original vanilla JS ---
 function createSimplexNoise() {
   const F3 = 1.0 / 3.0
   const G3 = 1.0 / 6.0
@@ -102,6 +101,108 @@ function createSimplexNoise() {
   return { noise3D }
 }
 
+function createChimeEngine() {
+  let ctx: AudioContext | null = null
+  let masterGain: GainNode | null = null
+  let reverbNode: ConvolverNode | null = null
+  let dryGain: GainNode | null = null
+  let wetGain: GainNode | null = null
+  let unlocked = false
+  let muted = false
+
+  const SCALE = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25]
+
+  function buildReverbImpulse(audioCtx: AudioContext, seconds = 2.2, decay = 3.2) {
+    const rate = audioCtx.sampleRate
+    const length = Math.floor(rate * seconds)
+    const impulse = audioCtx.createBuffer(2, length, rate)
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch)
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay)
+      }
+    }
+    return impulse
+  }
+
+  function init() {
+    if (unlocked || typeof window === "undefined") return
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+
+    ctx = new AudioCtx()
+    masterGain = ctx.createGain()
+    masterGain.gain.value = 0.5
+
+    dryGain = ctx.createGain()
+    wetGain = ctx.createGain()
+    dryGain.gain.value = 0.55
+    wetGain.gain.value = 0.75
+
+    reverbNode = ctx.createConvolver()
+    reverbNode.buffer = buildReverbImpulse(ctx)
+
+    dryGain.connect(masterGain)
+    reverbNode.connect(wetGain)
+    wetGain.connect(masterGain)
+    masterGain.connect(ctx.destination)
+
+    unlocked = true
+  }
+
+  function resume() {
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume()
+    }
+  }
+
+  function playChime(intensity: number) {
+    if (!ctx || !masterGain || !dryGain || !reverbNode || muted) return
+    resume()
+
+    const clamped = Math.min(1, Math.max(0, intensity))
+    const noteCount = clamped < 0.35 ? 1 : clamped < 0.7 ? 2 : 3
+    const baseVolume = 0.05 + clamped * 0.09
+    const attack = 0.02 + (1 - clamped) * 0.03
+    const release = 1.6 + (1 - clamped) * 1.4
+
+    for (let n = 0; n < noteCount; n++) {
+      const freq = SCALE[Math.floor(Math.random() * SCALE.length)] * (n === 0 ? 1 : n === 1 ? 2 : 1.5)
+
+      const osc = ctx.createOscillator()
+      osc.type = "sine"
+      osc.frequency.value = freq
+
+      const noteGain = ctx.createGain()
+      const now = ctx.currentTime
+      noteGain.gain.setValueAtTime(0, now)
+      noteGain.gain.linearRampToValueAtTime(baseVolume / noteCount, now + attack)
+      noteGain.gain.exponentialRampToValueAtTime(0.001, now + attack + release)
+
+      osc.connect(noteGain)
+      noteGain.connect(dryGain)
+      noteGain.connect(reverbNode)
+
+      osc.start(now)
+      osc.stop(now + attack + release + 0.1)
+    }
+  }
+
+  function setMuted(value: boolean) {
+    muted = value
+  }
+
+  function dispose() {
+    if (ctx) {
+      ctx.close()
+      ctx = null
+      unlocked = false
+    }
+  }
+
+  return { init, playChime, setMuted, dispose }
+}
+
 type Dot = {
   x: number
   y: number
@@ -110,25 +211,17 @@ type Dot = {
   timeOffset: number
 }
 
-/**
- * Full-viewport animated background: a grid of chromatically-aberrated
- * "+" / "·" glyphs that drift via simplex noise and bloom on cursor proximity.
- *
- * Renders a single fixed <canvas>. Give it `pointer-events-none` (default)
- * so it never blocks clicks — hover tracking uses a window-level mousemove
- * listener regardless.
- *
- * Config is read once on mount; if you need it to react to prop changes,
- * remount via a `key` prop.
- */
 export function ChromaticGrid({
   config: userConfig,
   className,
+  soundEnabled = true,
 }: {
   config?: Partial<ChromaticGridConfig>
   className?: string
+  soundEnabled?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [needsUnlock, setNeedsUnlock] = useState(soundEnabled)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -138,6 +231,8 @@ export function ChromaticGrid({
 
     const config: ChromaticGridConfig = { ...DEFAULT_CONFIG, ...userConfig }
     const simplex = createSimplexNoise()
+    const chime = createChimeEngine()
+    chime.setMuted(!soundEnabled)
 
     let dots: Dot[] = []
     let currentDpr = 1
@@ -147,6 +242,12 @@ export function ChromaticGrid({
     let rafId = 0
 
     const mouse = { x: -1000, y: -1000, isActive: false }
+
+    let lastMouseX = -1000
+    let lastMouseY = -1000
+    let lastMouseTime = 0
+    let lastChimeTime = 0
+    const CHIME_COOLDOWN_MS = 220
 
     function generateSprites() {
       spriteDrawSize = config.fontSize * 3
@@ -272,21 +373,55 @@ export function ChromaticGrid({
     }
 
     function handleMouseMove(e: MouseEvent) {
-      // Keep this in CSS pixel space to match dot.x/dot.y (which are built
-      // from window.innerWidth/innerHeight, not the device-pixel canvas
-      // size). DPR scaling only applies at the final draw step below.
       mouse.x = e.clientX
       mouse.y = e.clientY
       mouse.isActive = true
+
+      if (soundEnabled) {
+        const now = performance.now()
+        const dt = now - lastMouseTime
+        if (lastMouseTime > 0 && dt > 0) {
+          const dx = e.clientX - lastMouseX
+          const dy = e.clientY - lastMouseY
+          const distance = Math.sqrt(dx * dx + dy * dy)
+          const speed = distance / dt
+
+          const intensity = Math.min(1, speed / 2.2)
+          const cooldown = CHIME_COOLDOWN_MS - intensity * 100
+          if (speed > 0.15 && now - lastChimeTime > cooldown) {
+            chime.playChime(intensity)
+            lastChimeTime = now
+          }
+        }
+        lastMouseX = e.clientX
+        lastMouseY = e.clientY
+        lastMouseTime = now
+      }
     }
 
     function handleMouseOut() {
       mouse.isActive = false
     }
 
+    // Unlock audio on the first real user gesture (click/tap, key press,
+    // or scroll all count — mousemove does NOT, per browser autoplay policy).
+    function handleFirstInteraction() {
+      if (soundEnabled) {
+        chime.init()
+        chime.playChime(0.15)
+        setNeedsUnlock(false)
+      }
+      window.removeEventListener("pointerdown", handleFirstInteraction)
+      window.removeEventListener("keydown", handleFirstInteraction)
+      window.removeEventListener("scroll", handleFirstInteraction)
+    }
+
     window.addEventListener("resize", resize)
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseout", handleMouseOut)
+    window.addEventListener("pointerdown", handleFirstInteraction, { once: true })
+    window.addEventListener("keydown", handleFirstInteraction, { once: true })
+    window.addEventListener("scroll", handleFirstInteraction, { once: true, passive: true })
 
     resize()
     rafId = requestAnimationFrame(animate)
@@ -296,17 +431,29 @@ export function ChromaticGrid({
       window.removeEventListener("resize", resize)
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("mouseout", handleMouseOut)
+      window.removeEventListener("pointerdown", handleFirstInteraction)
+      window.removeEventListener("keydown", handleFirstInteraction)
+      window.removeEventListener("scroll", handleFirstInteraction)
+      chime.dispose()
     }
-    // Config is captured once on mount by design — pass a `key` to remount
-    // with new config instead of relying on prop-change reactivity here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [soundEnabled])
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={className ?? "pointer-events-none fixed inset-0 z-0"}
-      aria-hidden="true"
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className={className ?? "pointer-events-none fixed inset-0 z-0"}
+        aria-hidden="true"
+      />
+      {soundEnabled && needsUnlock && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-10 -translate-x-1/2 animate-pulse rounded-full border border-border bg-background/70 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md"
+        >
+          Click anywhere for sound ✨
+        </div>
+      )}
+    </>
   )
 }
